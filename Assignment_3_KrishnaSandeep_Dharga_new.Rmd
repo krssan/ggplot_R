@@ -1,0 +1,856 @@
+---
+title: "Assignment3 - Predict Customer Churn"
+output: html_notebook
+---
+
+###Introduction
+
+---
+
+The aim of this analysis is to predict customer churn in a Telecom company. Two classification models will be used to predict the likelyhood of customer churn. The two models will be compared based on their accuracy.
+```{r include = FALSE, message=FALSE}
+#The R libraries listed below are used for this analysis. This block loads the libraries and reads data from the file
+library(tidyverse)
+library(ggplot2)
+library(DataExplorer)
+library(plotly)
+library(caret)
+library(randomForest)
+library(gridExtra)
+#read data file from project data folder present in project working directory
+telco_customer_churn_raw_data <- read_csv("data\\WA_Fn-UseC_-Telco-Customer-Churn.csv")
+```
+
+###Data Set
+
+---
+
+The data set consists of 7,043 observations of 21 variables as shown below: <br>
+
+* **customerID:** Unique identifier for each customer
+* **gender:** Gender of customer
+* **SeniorCitizen:** A binary variable which identifies if a customer is a Senior Citizen (1) or not (0)
+* **Partner:** A binary variable which identifies if a customer has a partner (Yes/No)
+* **Dependents:** A binary variable which identifies if a customer has any dependents (Yes/No)
+* **tenure:** The tenure of association of the customer with the company in months
+* **PhoneService:** A binary variable which identifies if a customer has phone service
+* **MultipleLines:** Variable that identfies if customers having phone lines have multiple lines or not
+* **InternetService:** This variable identifies the type of internet service that the customer has
+* **OnlineSecurity:** Variable that identfies if customers having internet service have online security or not
+* **Onlinebackup:** Variable that identfies if customers having internet service have online backup or not
+* **DeviceProtection:** Variable that identfies if customers having internet service have device protection or not
+* **TechSupport:** Variable that identfies if customers having internet service have availed tech support or not
+* **StreamingTV:** Variable that identfies if customers having internet service have TV Streaming or not
+* **StreamingMovies:** Variable that identfies if customers having internet service have Movie Streaming or not
+* **Contract:** Variable that identfies the contract type of the customers
+* **PaperlessBilling:** Variable that identfies if the customer has opted for paperless billing
+* **PaymentMethod:** Variable that identfies the payment method of the customer
+* **MonthlyCharges:** Variable that identfies the monthly bill amount of the customer
+* **TotalCharges:** Variable that identfies the overall bill amount of the customer throughout the tenure
+* **Churn:** Variable that identfies if the customer has cancelled the company's services<br>
+
+Let's look at the distinct values present in each categorical variable.
+
+Some factor variables have 3 types, let's see what those values are, and if we can group them in anyway.
+```{r message=FALSE}
+options(width = 10)
+telco_customer_churn_raw_data %>%
+     summarise_all(funs(n_distinct(.)))
+
+as.data.frame(table(telco_customer_churn_raw_data$MultipleLines))
+as.data.frame(table(telco_customer_churn_raw_data$InternetService))
+as.data.frame(table(telco_customer_churn_raw_data$OnlineSecurity))
+as.data.frame(table(telco_customer_churn_raw_data$OnlineBackup))
+as.data.frame(table(telco_customer_churn_raw_data$DeviceProtection))
+as.data.frame(table(telco_customer_churn_raw_data$TechSupport))
+as.data.frame(table(telco_customer_churn_raw_data$StreamingMovies))
+as.data.frame(table(telco_customer_churn_raw_data$StreamingTV))
+```      
+As we can see, some of the factors have 3 values, but the categories "No Internet Service"/"No Phone Service" are not adding any additional value as that information is already captured in a separate variable. So, let's update these two values to "No".
+
+Also, since all categorical variables are in yes/no format except Senior Citizen, we can transform that also into Yes/No format. Let's also transform the output variable Churn into 1/0 format so that we do not have to dummify it further.
+```{r message=FALSE}
+#Transform MultipleLines Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_raw_data %>%
+     mutate(MultipleLines = ifelse(MultipleLines=="No phone service","No",MultipleLines))
+#Transform OnlineSecurity Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(OnlineSecurity = ifelse(OnlineSecurity=="No internet service","No",OnlineSecurity))
+#Transform OnlilneBackup Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(OnlineBackup = ifelse(OnlineBackup=="No internet service","No",OnlineBackup))
+#Transform DeviceProtection Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(DeviceProtection = ifelse(DeviceProtection=="No internet service","No",DeviceProtection))
+#Transform TechSupport Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(TechSupport = ifelse(TechSupport=="No internet service","No",TechSupport))
+#Transform Streaming Movies Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(StreamingMovies = ifelse(StreamingMovies=="No internet service","No",StreamingMovies))
+#Transform Streaming TV Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(StreamingTV = ifelse(StreamingTV=="No internet service","No",StreamingTV))
+#Transform Senior Citizen Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(SeniorCitizen = ifelse(SeniorCitizen==1,"Yes","No"))
+#Transform Churn Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(Churn = ifelse(Churn=="Yes",1,0))
+
+```
+
+Let's look at the structure of the dataset.
+```{r fig.width=8,  message=FALSE}
+telco_customer_churn_transformed_data %>%
+     plot_str()
+```
+From the above graph we can notice that some categorical variables are currently 'characters'. We can convert them to factors for more accurate representation.
+```{r  message=FALSE}
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(SeniorCitizen = as.factor(SeniorCitizen),
+            gender = as.factor(gender),
+            Partner = as.factor(Partner),
+            Dependents = as.factor(Dependents),
+            SeniorCitizen = as.factor(SeniorCitizen),
+            PhoneService = as.factor(PhoneService),
+            MultipleLines = as.factor(MultipleLines),
+            InternetService = as.factor(InternetService),
+            OnlineSecurity = as.factor(OnlineSecurity),
+            OnlineBackup = as.factor(OnlineBackup),
+            DeviceProtection = as.factor(DeviceProtection),
+            TechSupport = as.factor(TechSupport),
+            StreamingTV = as.factor(StreamingTV),
+            StreamingMovies = as.factor(StreamingMovies),
+            PaperlessBilling = as.factor(PaperlessBilling),
+            Contract = as.factor(Contract),
+            PaymentMethod = as.factor(PaymentMethod),
+            Churn = as.factor(Churn))
+```
+
+###Data Exploration
+
+---
+
+As the graph below shows, 99.8% of the observations are complete.
+
+```{r message=FALSE}
+telco_customer_churn_transformed_data %>%
+     plot_intro()
+```
+The below graph shows us that "TotalCharges" has missing values. Though they are very few, we will check the reason behind this in further sections.
+```{r message=FALSE}
+telco_customer_churn_transformed_data %>%
+     plot_missing(title = "Missing values in variables")
+```
+
+From the below count we can see that there are no duplicate Customer IDs in the dataset. There are 7043 records and 7043 unique Customer IDs
+```{r}
+telco_customer_churn_transformed_data %>%
+     summarise(Total_Num_Records = n(),Unique_CustomerIDs = n_distinct(customerID))
+```
+
+From the below frequency distributions we can see that there are no duplicate values in any categorical variable. The data appears to be clean.
+```{r fig.width=10, message=FALSE}
+#Customer ID related information has already been check above. It is not required here.
+telco_customer_churn_transformed_data %>%
+     select(-customerID) %>%
+     plot_bar(ggtheme = theme_light(), title = "Categorical Variable Distributions")
+
+?plot_bar
+```
+
+From the below histograms we can see that there are some customers with a tenure of 0 months. We assume that these are new customers, added in the past month.
+
+Also, notice that Total Charges is skewed to the right, which makes sense as we have customers with high tenure. The total charges for them will have accumulated for a long period.
+```{r fig.width=6, fig.height=6}
+telco_customer_churn_transformed_data %>%
+     plot_histogram(ggtheme = theme_light())
+```
+
+The missing values of "TotalCharges" that we noticed in earlier sections is because of the new customers (tenure=0). Since they have not completed a billing cycle yet, their Total Charge value is missing. We can confirm this with the result below, which checks if there are any missing TotalCharges values for observations with non-zero tenures. As we can see there are none. So, we can conclude that missing TotalCharges are because of 0 tenure.
+```{r}
+telco_customer_churn_transformed_data %>%
+     filter(is.na(TotalCharges) && tenure!=0)
+```
+
+Let's convert missing TotalCharges to 0 and plot missing values again.
+```{r}
+#Check if TotalCharges is NA and replace with 0
+telco_customer_churn_cleaned_data <- telco_customer_churn_transformed_data %>%
+     mutate(TotalCharges = ifelse(is.na(TotalCharges),0,TotalCharges))
+
+telco_customer_churn_cleaned_data %>%
+     plot_missing()
+```
+Before proceeding to modeling, let's check if there are any trends in the data. 
+
+The overall categorical variables in this data set can be classified as follows:
+
+* variables that define attributes of a customer
+* variables that define attributes of the service
+
+Let's check how these variables affect Churn by plotting them
+
+**Customer Atrributes**
+
+---
+
+From the graphs below we can notice that:
+
+* Gender does not have a clear trend for Churn; the gender split of churned customers is nearly 50-50.
+* Senior Citizens and customers with dependents seems to have lower churn, we can check the effect of these variable on churn further.
+```{r}
+#using plotly here just to explore the functinalities in this package more
+#Plot by SeniorCitizen
+telco_customer_churn_cleaned_data %>%
+     group_by(Churn,SeniorCitizen) %>%
+     summarise(count = n()) %>%
+     plot_ly(x= ~SeniorCitizen, y= ~count, name= ~Churn, type = 'bar', width = 400, height = 400) %>%
+     layout(title = 'Senior Citizen distribution based on Churn')
+
+#Plot by Gender
+telco_customer_churn_cleaned_data %>%
+     group_by(Churn,gender) %>%
+     summarise(count = n()) %>%
+     plot_ly(x= ~gender, y= ~count, name= ~Churn, type = 'bar', width = 400, height = 400) %>%
+     layout(title = 'Gender distribution based on Churn')
+
+#Plot by Dependents
+telco_customer_churn_cleaned_data %>%
+     group_by(Churn,Dependents) %>%
+     summarise(count = n()) %>%
+     plot_ly(x= ~Dependents, y= ~count, name= ~Churn, type = 'bar', width = 400, height = 400) %>%
+     layout(title = 'Dependent distribution based on Churn')
+    
+#Plot by Partner
+telco_customer_churn_cleaned_data %>%
+     group_by(Churn,Partner) %>%
+     summarise(count = n()) %>%
+     plot_ly(x= ~Partner, y= ~count, name= ~Churn, type = 'bar', width = 400, height = 400) %>%
+     layout(title = 'Partner distribution based on Churn')
+
+```
+
+**Service Atrributes**
+
+---
+
+From the plots below we can infer the following:
+
+* Customers with Fiber Optic Internet Sevice seems to churn more
+* Customer with Month-to-month contracts seems to churn more
+* Customers who pay their bills through Electronic Check seem to churn more
+* Customers who have opted for paperless bills seem to churn more
+
+```{r fig.width=15, fig.height=10}
+#using ggplot here just to explore the functinalities in this package more
+#Plot by SeniorCitizen
+p1 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PhoneService) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PhoneService,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PhoneService distribution") +
+    labs(
+        x = "Phone Service",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Gender
+p2 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,MultipleLines) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(MultipleLines,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("MultipleLines distribution") +
+    labs(
+        x = "Multiple Lines",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Dependents
+p3 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,InternetService) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(InternetService,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("InternetService distribution") +
+    labs(
+        x = "Internet Service",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by OnlineSecurity
+p4 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,OnlineSecurity) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(OnlineSecurity,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("OnlineSecurity distribution") +
+    labs(
+        x = "Online Security",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by OnlineBackup
+p5 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,OnlineBackup) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(OnlineBackup,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("OnlineBackup distribution") +
+    labs(
+        x = "Online Backup",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by DeviceProtection
+p6 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,DeviceProtection) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(DeviceProtection,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("DeviceProtection distribution") +
+    labs(
+        x = "Device Protection",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by TechSupport
+p7 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,TechSupport) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(TechSupport,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("TechSupport distribution") +
+    labs(
+        x = "Tech Support",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by StreamingTV
+p8 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,StreamingTV) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(StreamingTV,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("StreamingTV distribution") +
+    labs(
+        x = "StreamingTV",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by StreamingMovies
+p9 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,StreamingMovies) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(StreamingMovies,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("StreamingMovies distribution") +
+    labs(
+        x = "Streaming Movies",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by PaperlessBilling
+p10 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PaperlessBilling) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PaperlessBilling,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PaperlessBilling distribution") +
+    labs(
+        x = "Paperless Billing",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Contract
+p11 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,Contract) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(Contract,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("Contract Type distribution") +
+    labs(
+        x = "Contract Type",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by PaymentMethod
+p12 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PaymentMethod) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PaymentMethod,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PaymentMethod distribution") +
+    labs(
+        x = "Payment Method",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12)
+```
+
+**Other Attributes**
+
+---
+
+Let's look at the following variables in this section:
+
+* Tenure
+* Monthly Charges
+* Overall Charges
+
+We can notice that customers who churned were predominantly from lower tenure groups. So, this could be an important variable for our modeling. Overallcharges also has the same distribution with respect to churn, but that could be because it has strong correlation with tenure (OverallCharges = Tenure x MonthlyCharges).
+
+```{r fig.height=10}
+#Tenure
+telco_customer_churn_cleaned_data %>%
+      plot_ly(x= ~tenure, name = ~Churn, type = 'histogram', showlegend = T, width = 500, height = 400) %>%
+     layout(title = 'Tenure distribution by Churn')
+
+#Monthly Charges
+telco_customer_churn_cleaned_data %>%
+      plot_ly(x= ~MonthlyCharges, name = ~Churn, type = 'histogram', showlegend = T, width = 500, height = 400) %>%
+     layout(title = 'Monthly Charges distribution by Churn')
+
+#Overall Charges
+telco_customer_churn_cleaned_data %>%
+      plot_ly(x= ~TotalCharges, name = ~Churn, type = 'histogram', showlegend = T, width = 500, height = 400) %>%
+     layout(title = 'Total Charges distribution by Churn')
+
+```
+
+By plotting Tenure against MonthlyCharges, we can notice in the below graph that churned customers are mostly concentrated in the low tenure + high monthly charges region. These two variables could be useful in our model.
+```{r message=FALSE}
+telco_customer_churn_cleaned_data %>%
+     plot_ly(x = ~tenure, y = ~MonthlyCharges, name = ~Churn, width = 1000, height = 500) %>%
+     layout(title = 'Monthly Charges vs Tenure by Churn')
+```
+By plotting Tenure against TotalCharges, we can notice in the below graph that churned customers are mostly concentrated in the low tenure + low TotalCharges region.
+
+```{r message=FALSE}
+telco_customer_churn_cleaned_data %>%
+     plot_ly(x = ~tenure, y = ~TotalCharges, name = ~Churn, width = 1000, height = 500) %>%
+     layout(title = 'Total Charges vs Tenure by Churn')
+```
+Plotting Monthly Charges against TotalCharges may not be very useful, but let's see if the plot can give us some insight.
+As we can see churned customers are in the low-side of TotalCharges (these could be customers with low tenures).
+```{r message=FALSE}
+telco_customer_churn_cleaned_data %>%
+     plot_ly(x = ~MonthlyCharges, y = ~TotalCharges, name = ~Churn, width = 1000, height = 500) %>%
+     layout(title = 'Monthly Charges vs Total Charges by Churn')
+```
+Let's plot the distribution of categorical variables specifically in **churned customers** to check if any variable stands out.
+
+**Customer Attributes distribution on churned customers**
+
+---
+
+We saw earlier that Senior Citizen and Dependent variables could have correlation with Churn, let's see what is the distribution of these variables in churned customers. As we can see, about 25% of the churned customers are senior citizens and 17.4 percent are those with dependents. So, these attributes may not be as useful as we thought they are afterall.
+
+```{r}
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~SeniorCitizen, values = ~Churn, type = "pie", width = 500, height = 400) %>%
+      layout(title = 'SeniorCitizens distribution in Churned Customers')
+
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~Dependents, values = ~Churn, type = "pie", width = 600, height = 400) %>%
+      layout(title = 'Dependent distribution in churned customers')
+```
+
+**Service Attributes distribution on churned customers**
+
+---
+
+We saw earlier that Payment Method,  Contract Type, Paperless Billing and Internet Service Type attributes could have correlation with Churn, let's see what is the distribution of these variables in churned customers.
+
+As we can notice from the graphs below, all the 4 variables have a specific category that contributes to more than 50% of churned customers. These variables could be very useful for our models.
+```{r fig.align='center'}
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~PaymentMethod, values = ~Churn, type = "pie", width = 600, height = 400) %>%
+      layout(title = 'Payment Method distribution in Churned Customers')
+
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~Contract, values = ~Churn, type = "pie", width = 600, height = 400) %>%
+      layout(title = 'ContractType distribution in churned customers')
+
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~PaperlessBilling, values = ~Churn, type = "pie", width = 600, height = 400) %>%
+      layout(title = 'PaperlessBilling distribution in churned customers')
+
+telco_customer_churn_cleaned_data %>%
+      filter(Churn==1) %>%
+      plot_ly(labels = ~InternetService, values = ~Churn, type = "pie", width = 600, height = 400) %>%
+      layout(title = 'InternetService distribution in churned customers')
+```
+###Results of EDA
+
+---
+
+Based on the trends we noticed in EDA, we found that the following variables could be very important to predict customer churn
+
+* Payment Method (ElectronicCheck)
+* PaperlessBilling
+* ContractType (Month-to-Month)
+* InternetService
+* Tenure
+* MonthlyCharges
+
+Notice that these are all service attributes and **not** customer attributes. May be the company must look at service attributes to control churn more than customemr attributes. This could be a good general guiding principle for the company. 
+Let's proceed to modeling now and use these attributes.
+
+###Modeling
+
+---
+
+Dummify the data so that categorical variables are converted to multiple columns with 0/1s.
+```{r message=FALSE}
+telco_customer_churn_dummified <- telco_customer_churn_cleaned_data %>%
+                                        dummify() %>%
+                                        mutate(Churn_yes = as.factor(ifelse(Churn_1==1, "Yes", "No")))
+```
+
+Partition data into Training and Validation datasets with a 70-30 split of the full dataset.
+```{r message=FALSE}
+set.seed(10)
+
+inTrainingData <- createDataPartition(telco_customer_churn_dummified$Churn_yes, p=0.70, list=FALSE)
+
+training.set <- telco_customer_churn_dummified[inTrainingData,]
+
+Totalvalidation.set <- telco_customer_churn_dummified[-inTrainingData,]
+
+```
+
+####Random Forest
+
+---
+
+Let's try some mtry values and see which value gives us a lower OOB error percentage. 
+
+After repeated trials, mtry 5 was found to give the lowest OOB error of around 21% as shown below.
+
+As we can see from the **Variable Importance Plots** below, the most important variables for predicting Churn are
+
+* tenure
+* TotalCharges
+* MonthlyCharges
+* Contract_Month.to.month
+* InternetServuce_Fiber.optic
+* PaymentMethod.Electronic.check
+
+which is pretty much consistent with what we found in our EDA.
+
+```{r fig.height=10, message=FALSE}
+training.set <- training.set %>%
+                    select(-customerID, -Churn_0, -Churn_1) 
+
+#rf_fit_check <- randomForest(Churn_yes ~., data = training.set, importance = TRUE, metric = "ROC", ntree = 1001, mtry = 2)
+#rf_fit_check <- randomForest(Churn_yes ~., data = training.set, importance = TRUE, metric = "ROC", ntree = 1001, mtry = 3)
+#rf_fit_check <- randomForest(Churn_yes ~., data = training.set, importance = TRUE, metric = "ROC", ntree = 1001, mtry = 4)
+rf_fit_check <- randomForest(Churn_yes ~., data = training.set, importance = TRUE, metric = "roc", ntree = 1001, mtry = 5)
+
+VariableImp
+varImpPlot(VariableImp)
+```
+
+Let's use these variable and build a Random Forest model.
+
+
+```{r Random Forest}
+control <- trainControl(method = "repeatedcv", number = 10, repeats=3, search = "grid", summaryFunction=twoClassSummary, classProbs = TRUE)
+set.seed(10)
+tunegrid <- expand.grid(.mtry=5)
+rf_fit <- train(Churn_yes ~ tenure+
+                     MonthlyCharges+
+                     TotalCharges+
+                     Contract_Month.to.month+
+                     InternetService_Fiber.optic,
+                data = training.set,
+                method = "rf",
+                metric = "ROC",
+                tunegrid=tunegrid,
+                trControl=control,
+                preProcess = c("center", "scale"),
+                ntree=1001)
+```
+
+Let's look at the model stistics of the Random Forest model. 
+
+As we can see the best ROC was achieved at mtry = 2. The model has high number of false negatives (number of churned customers who were classified as Not Churned). Let's see if Logistic Regression can give us better predictions in the next section.
+```{r}
+print(rf_fit)
+
+plot(rf_fit)
+
+
+pred_test <- predict(rf_fit,newdata = Totalvalidation.set)
+
+confusionMatrix(data=pred_test, Totalvalidation.set$Churn_yes)
+
+results_1 <- confusionMatrix(data=pred_test, Totalvalidation.set$Churn_yes)
+confusion_mat1 <- as.data.frame(results_1$table)
+
+ggplot(data =  confusion_mat1, mapping = aes(x = Reference, y = Prediction)) +
+  ggtitle("Confusion Matrix for Random Forest") +
+  geom_tile(aes(fill = Freq), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Freq)), vjust = 1) +
+  scale_fill_gradient(low = "#B2DBD5", high = "#2B616D") +
+  theme_bw() + theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+
+####Logistic Regression
+
+---
+
+Let's try to find out which predictors are statistically significant for a GLM model.
+
+As we can see, the following variables are statistically significant in this model:
+
+* tenure
+* totalCharges
+* Contract_Month.to.month
+* PaperlessBilling_No
+* PaymentMethod_Electronic.check
+
+as they have low P-values. This is almost similar to what we found in Random Forest, except that MonthlyCharges has not been found statistically significant here.
+
+```{r}
+set.seed(10)
+
+glm_fit_check <- glm(Churn_yes ~., data = training.set, family = 'binomial')
+
+summary(glm_fit_check)
+```
+Let;s build a regression model using these variables and check how they predict churn.
+```{r}
+training.set.2 <- training.set %>%
+                    mutate(Churn_yes = as.factor(ifelse(Churn_yes=="Yes",1,0)))
+Totalvalidation.set.2 <- Totalvalidation.set %>%
+                    mutate(Churn_yes = as.factor(ifelse(Churn_yes=="Yes",1,0)))
+
+control_reg <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(10)
+reg_fit <- train(Churn_yes ~ tenure+
+                             TotalCharges+
+                             Contract_Month.to.month+
+                             PaperlessBilling_No+
+                             PaymentMethod_Electronic.check+
+                             Contract_One.year,
+                         data = training.set.2,
+                         method = "glm",
+                         family = "binomial",
+                         preProcess = c("center","scale"),
+                         trControl = control_reg)
+```
+
+As we can see the accuracy level has dropped to 77%.
+```{r}
+print(reg_fit)
+
+pred_test_reg <- predict(reg_fit,newdata = Totalvalidation.set.2)
+
+confusionMatrix(data=pred_test_reg, Totalvalidation.set.2$Churn_yes)
+
+results_2 <- confusionMatrix(data=pred_test_reg, Totalvalidation.set.2$Churn_yes)
+confusion_mat2 <- as.data.frame(results_2$table)
+
+ggplot(data =  confusion_mat2, mapping = aes(x = Reference, y = Prediction)) +
+  ggtitle("Confusion Matrix for Regression Iteration 1") +
+  geom_tile(aes(fill = Freq), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Freq)), vjust = 1) +
+  scale_fill_gradient(low = "#B2DBD5", high = "#2B616D") +
+  theme_bw() + theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold"))
+
+```
+
+Let's try to run regression using the same variables that we used in Random Forest and check the results
+```{r}
+control_reg_2 <- trainControl(method = "repeatedcv", number = 10, repeats = 3)
+set.seed(10)
+reg_fit_2 <- train(Churn_yes ~ tenure+
+                               MonthlyCharges+
+                               TotalCharges+
+                               Contract_Month.to.month+
+                               InternetService_Fiber.optic,
+                         data = training.set.2,
+                         method = "glm",
+                         family = "binomial",
+                         preProcess = c("center","scale"),
+                         trControl = control_reg_2)
+
+```
+
+As we can see the accuracy level is still 77%. And the false negatives are still on the higher side.
+```{r}
+print(reg_fit_2)
+
+pred_test_reg_2 <- predict(reg_fit_2,newdata = Totalvalidation.set.2)
+
+confusionMatrix(data=pred_test_reg, Totalvalidation.set.2$Churn_yes)
+
+results_3 <- confusionMatrix(data=pred_test_reg, Totalvalidation.set.2$Churn_yes)
+confusion_mat3 <- as.data.frame(results_3$table)
+
+ggplot(data =  confusion_mat3, mapping = aes(x = Reference, y = Prediction)) +
+  ggtitle("Confusion Matrix for Regression Iteration 2") +
+  geom_tile(aes(fill = Freq), colour = "white") +
+  geom_text(aes(label = sprintf("%1.0f", Freq)), vjust = 1) +
+  scale_fill_gradient(low = "#B2DBD5", high = "#2B616D") +
+  theme_bw() + theme(legend.position = "none", plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+###Conclusions
+
+---
+
+Between the two models used, Random Forest is the winner as it has better accuracy.
+
+The following conclusions can be drawn from this analysis:
+
+* Churn seems to be more affected by service attributes than customer demographic attributes.
+* Customers who have been associated with the company longer seems less likely to churn.
+* Customers with high monthly charges are more likely to churn.
+* Customers who have Fiber Optic internet connection are more likely to churn.
+

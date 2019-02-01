@@ -1,0 +1,365 @@
+---
+title: "Assignment3 - Predict Customer Churn"
+output: html_notebook
+---
+
+###Introduction
+
+---
+
+The aim of this analysis is to predict customer churn in a Telecom company. Two classification models will be used to predict the likelyhood of customer churn. The two models will be compared based on their accuracy.
+```{r include = FALSE, message=FALSE}
+#The R libraries listed below are used for this analysis. This block loads the libraries and reads data from the file
+library(tidyverse)
+library(ggplot2)
+library(DataExplorer)
+library(plotly)
+library(caret)
+library(randomForest)
+library(gridExtra)
+#read data file from project data folder present in project working directory
+telco_customer_churn_raw_data <- read_csv("data\\WA_Fn-UseC_-Telco-Customer-Churn.csv")
+```
+As we can see, some of the factors have 3 values, but the categories "No Internet Service"/"No Phone Service" are not adding any additional value as that information is already captured in a separate variable. So, let's update these two values to "No".
+
+Also, since all categorical variables are in yes/no format except Senior Citizen, we can transform that also into Yes/No format. Let's also transform the output variable Churn into 1/0 format so that we do not have to dummify it further.
+```{r message=FALSE}
+#Transform MultipleLines Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_raw_data %>%
+     mutate(MultipleLines = ifelse(MultipleLines=="No phone service","No",MultipleLines))
+#Transform OnlineSecurity Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(OnlineSecurity = ifelse(OnlineSecurity=="No internet service","No",OnlineSecurity))
+#Transform OnlilneBackup Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(OnlineBackup = ifelse(OnlineBackup=="No internet service","No",OnlineBackup))
+#Transform DeviceProtection Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(DeviceProtection = ifelse(DeviceProtection=="No internet service","No",DeviceProtection))
+#Transform TechSupport Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(TechSupport = ifelse(TechSupport=="No internet service","No",TechSupport))
+#Transform Streaming Movies Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(StreamingMovies = ifelse(StreamingMovies=="No internet service","No",StreamingMovies))
+#Transform Streaming TV Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(StreamingTV = ifelse(StreamingTV=="No internet service","No",StreamingTV))
+#Transform Senior Citizen Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(SeniorCitizen = ifelse(SeniorCitizen==1,"Yes","No"))
+#Transform Churn Variable
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(Churn = ifelse(Churn=="Yes",1,0))
+
+```
+From the above graph we can notice that some categorical variables are currently 'characters'. We can convert them to factors for more accurate representation.
+```{r  message=FALSE}
+telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
+     mutate(SeniorCitizen = as.factor(SeniorCitizen),
+            gender = as.factor(gender),
+            Partner = as.factor(Partner),
+            Dependents = as.factor(Dependents),
+            SeniorCitizen = as.factor(SeniorCitizen),
+            PhoneService = as.factor(PhoneService),
+            MultipleLines = as.factor(MultipleLines),
+            InternetService = as.factor(InternetService),
+            OnlineSecurity = as.factor(OnlineSecurity),
+            OnlineBackup = as.factor(OnlineBackup),
+            DeviceProtection = as.factor(DeviceProtection),
+            TechSupport = as.factor(TechSupport),
+            StreamingTV = as.factor(StreamingTV),
+            StreamingMovies = as.factor(StreamingMovies),
+            PaperlessBilling = as.factor(PaperlessBilling),
+            Contract = as.factor(Contract),
+            PaymentMethod = as.factor(PaymentMethod),
+            Churn = as.factor(Churn))
+```
+From the plots below we can infer the following:
+
+* Customers with Fiber Optic Internet Sevice seems to churn more
+* Customer with Month-to-month contracts seems to churn more
+* Customers who pay their bills through Electronic Check seem to churn more
+* Customers who have opted for paperless bills seem to churn more
+
+```{r fig.width=15, fig.height=10}
+#using ggplot here just to explore the functinalities in this package more
+#Plot by SeniorCitizen
+p1 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PhoneService) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PhoneService,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PhoneService distribution") +
+    labs(
+        x = "Phone Service",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Gender
+p2 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,MultipleLines) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(MultipleLines,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("MultipleLines distribution") +
+    labs(
+        x = "Multiple Lines",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Dependents
+p3 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,InternetService) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(InternetService,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("InternetService distribution") +
+    labs(
+        x = "Internet Service",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by OnlineSecurity
+p4 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,OnlineSecurity) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(OnlineSecurity,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("OnlineSecurity distribution") +
+    labs(
+        x = "Online Security",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by OnlineBackup
+p5 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,OnlineBackup) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(OnlineBackup,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("OnlineBackup distribution") +
+    labs(
+        x = "Online Backup",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by DeviceProtection
+p6 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,DeviceProtection) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(DeviceProtection,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("DeviceProtection distribution") +
+    labs(
+        x = "Device Protection",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by TechSupport
+p7 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,TechSupport) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(TechSupport,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("TechSupport distribution") +
+    labs(
+        x = "Tech Support",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by StreamingTV
+p8 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,StreamingTV) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(StreamingTV,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("StreamingTV distribution") +
+    labs(
+        x = "StreamingTV",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by StreamingMovies
+p9 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,StreamingMovies) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(StreamingMovies,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("StreamingMovies distribution") +
+    labs(
+        x = "Streaming Movies",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by PaperlessBilling
+p10 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PaperlessBilling) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PaperlessBilling,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PaperlessBilling distribution") +
+    labs(
+        x = "Paperless Billing",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by Contract
+p11 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,Contract) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(Contract,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("Contract Type distribution") +
+    labs(
+        x = "Contract Type",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+#Plot by PaymentMethod
+p12 <- telco_customer_churn_cleaned_data %>%
+     group_by(Churn,PaymentMethod) %>%
+     summarise(count = n()) %>%
+     ggplot(aes(PaymentMethod,count,fill = Churn))+
+     geom_bar(stat = "identity", position = "dodge")+
+     coord_flip()+
+     ggtitle("PaymentMethod distribution") +
+    labs(
+        x = "Payment Method",
+        y = "Frequency"
+    ) +
+    theme(
+        plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.background = element_rect(
+            fill = "white",
+            colour = "lightgrey",
+            size = 0.75),
+        axis.title.x = element_text(face = "bold"),
+        axis.title.y = element_text(face = "bold"),
+        panel.background = element_rect(fill = "white"),
+        panel.grid.major.x = element_line(colour = "#C4DFE6", size = 0.05)
+    )
+
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12)
+```

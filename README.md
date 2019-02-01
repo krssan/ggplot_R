@@ -1,8 +1,3 @@
-# Assignment_3
+# Plotting using ggplot with some standard data sets
 
-Using the data provided to you, do the following:
-
-1. Split the data into training and testing sets
-2. Build at least two models to answer the question laid out in the Rmd file.
-3. Evaluate your models and choose the best. Explain why you chose that model.
-
+In this project I am plotting data from standard datasets using ggplot package. These graphs can be used for Exploratory Data Analyses or for building static reports.

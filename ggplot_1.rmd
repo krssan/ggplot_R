@@ -1,29 +1,15 @@
 ---
-title: "Assignment3 - Predict Customer Churn"
+title: "Plotting with ggplot using some standard data sets"
 output: html_notebook
 ---
 
-###Introduction
-
----
-
-The aim of this analysis is to predict customer churn in a Telecom company. Two classification models will be used to predict the likelyhood of customer churn. The two models will be compared based on their accuracy.
 ```{r include = FALSE, message=FALSE}
 #The R libraries listed below are used for this analysis. This block loads the libraries and reads data from the file
 library(tidyverse)
 library(ggplot2)
-library(DataExplorer)
-library(plotly)
-library(caret)
-library(randomForest)
-library(gridExtra)
 #read data file from project data folder present in project working directory
 telco_customer_churn_raw_data <- read_csv("data\\WA_Fn-UseC_-Telco-Customer-Churn.csv")
-```
-As we can see, some of the factors have 3 values, but the categories "No Internet Service"/"No Phone Service" are not adding any additional value as that information is already captured in a separate variable. So, let's update these two values to "No".
 
-Also, since all categorical variables are in yes/no format except Senior Citizen, we can transform that also into Yes/No format. Let's also transform the output variable Churn into 1/0 format so that we do not have to dummify it further.
-```{r message=FALSE}
 #Transform MultipleLines Variable
 telco_customer_churn_transformed_data <- telco_customer_churn_raw_data %>%
      mutate(MultipleLines = ifelse(MultipleLines=="No phone service","No",MultipleLines))
@@ -52,9 +38,6 @@ telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %
 telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
      mutate(Churn = ifelse(Churn=="Yes",1,0))
 
-```
-From the above graph we can notice that some categorical variables are currently 'characters'. We can convert them to factors for more accurate representation.
-```{r  message=FALSE}
 telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %>%
      mutate(SeniorCitizen = as.factor(SeniorCitizen),
             gender = as.factor(gender),
@@ -75,12 +58,14 @@ telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %
             PaymentMethod = as.factor(PaymentMethod),
             Churn = as.factor(Churn))
 ```
-From the plots below we can infer the following:
 
-* Customers with Fiber Optic Internet Sevice seems to churn more
-* Customer with Month-to-month contracts seems to churn more
-* Customers who pay their bills through Electronic Check seem to churn more
-* Customers who have opted for paperless bills seem to churn more
+### 1. Count of categorical variable values
+
+---
+
+These plots were created using Customer Churn dataset. Here I have attempted to display the counts of all categorical variables in the data set using individual ggplot statements. Finally, I have knit all the plots into a grid using "grid.arrange".
+
+There is also a shorter way of doing this, which I have attempted in the next section.
 
 ```{r fig.width=15, fig.height=10}
 #using ggplot here just to explore the functinalities in this package more

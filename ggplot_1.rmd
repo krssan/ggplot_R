@@ -1,12 +1,21 @@
 ---
 title: "Plotting with ggplot using some standard data sets"
-output: html_notebook
+output:
+  html_document:
+    df_print: paged
 ---
+
+##Introduction
+
+---
+
+In this project I am plotting data from some standard data sets using standard ggplot functions. There is no specific order or grouping of these charts. Rather these are some of the plots that I used for my homework assignments at Carnegie Mellon University and 
 
 ```{r include = FALSE, message=FALSE}
 #The R libraries listed below are used for this analysis. This block loads the libraries and reads data from the file
 library(tidyverse)
 library(ggplot2)
+library(gridExtra)
 #read data file from project data folder present in project working directory
 telco_customer_churn_raw_data <- read_csv("data\\WA_Fn-UseC_-Telco-Customer-Churn.csv")
 
@@ -57,6 +66,9 @@ telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %
             Contract = as.factor(Contract),
             PaymentMethod = as.factor(PaymentMethod),
             Churn = as.factor(Churn))
+
+telco_customer_churn_cleaned_data <- telco_customer_churn_transformed_data %>%
+     mutate(TotalCharges = ifelse(is.na(TotalCharges),0,TotalCharges))
 ```
 
 ### 1. Count of categorical variable values
@@ -64,8 +76,6 @@ telco_customer_churn_transformed_data <- telco_customer_churn_transformed_data %
 ---
 
 These plots were created using Customer Churn dataset. Here I have attempted to display the counts of all categorical variables in the data set using individual ggplot statements. Finally, I have knit all the plots into a grid using "grid.arrange".
-
-There is also a shorter way of doing this, which I have attempted in the next section.
 
 ```{r fig.width=15, fig.height=10}
 #using ggplot here just to explore the functinalities in this package more
@@ -347,4 +357,68 @@ p12 <- telco_customer_churn_cleaned_data %>%
     )
 
 grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12)
+```
+
+### 2. ggplots with some animation
+
+---
+
+In this section I attempted to add some animation to ggplots using gganimate package. Such plots may not be very useful for Exploratory Data Analyses, but they could be a cool option to include on a website to show trends.
+
+```{r echo=FALSE, message=FALSE, height=6, width = 6}
+
+library(ggExtra)
+library(gganimate)
+library(gapminder)
+library(gifski)
+library(magick)
+
+land_data <- read.csv("data\\landdata-states.csv")
+land_data_qtr1 <- land_data %>%
+                    filter(Qrtr ==1)
+
+ggplot(land_data_qtr1,aes(Land.Share..Pct.,Land.Value)) +
+     geom_point(aes(color = region)) +
+     theme_bw()+
+     labs(
+          title = 'Land value vs Land share % in House value: {closest_state}',
+          x = "Land Share Percentage",
+          y = "Land Value"
+     ) + 
+     theme(
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+        axis.title.x = element_text(face = "bold", size = 14),
+        axis.title.y = element_text(face = "bold", size = 14),
+        axis.text.x = element_text(face = "bold",size = 12),
+        axis.text.y = element_text(face = "bold", size = 12),
+        legend.position = "none"
+     ) +
+     transition_states(Year, state_length = 30) +
+     ease_aes('sine-in-out')
+```
+
+---
+
+<br>
+```{r echo=FALSE, message=FALSE, height = 6, width=6}
+land_data_qtr1 %>%
+     filter(region=="West") %>%
+     ggplot(aes(State, Land.Share..Pct.)) +
+          geom_col(aes(fill="red")) +
+          theme_bw() +
+          labs(
+               title = 'Land share % in total house value in Western US: {closest_state}',
+               x = "State",
+               y = "Landshare percentage in house value"
+          ) + 
+          theme(
+             plot.title = element_text(hjust = 0.5, face = "bold", size = 16),
+             axis.title.x = element_text(face = "bold", size = 14),
+             axis.title.y = element_text(face = "bold", size = 14),
+             axis.text.x = element_text(face = "bold",size = 12),
+             axis.text.y = element_text(face = "bold", size = 12),
+             legend.position = "none"
+          ) +
+          transition_states(Year, state_length = 30)
+
 ```
